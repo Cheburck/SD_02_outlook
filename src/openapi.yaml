@@ -1,0 +1,512 @@
+openapi: 3.0.3
+info:
+  title: Email REST API
+  description: |
+    REST API for Email System (Outlook) - Homework 02
+    
+    This API provides endpoints for managing users, email folders, and messages.
+    
+    ## Authentication
+    Most endpoints require authentication using JWT tokens. 
+    Include the token in the Authorization header:
+    ```
+    Authorization: Bearer <your-token>
+    ```
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+tags:
+  - name: Authentication
+    description: User registration and login
+  - name: Users
+    description: User management operations
+  - name: Folders
+    description: Email folder operations (protected)
+  - name: Messages
+    description: Email message operations
+  - name: Health
+    description: Health check endpoint
+
+paths:
+  /api/auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: Creates a new user account and returns a JWT token
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+            example:
+              login: john_doe
+              firstName: John
+              lastName: Doe
+              password: securepassword123
+      responses:
+        '200':
+          description: Successfully registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+              example:
+                access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                token_type: bearer
+        '400':
+          description: User already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                detail: User with login 'john_doe' already exists
+
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      description: Authenticates user and returns a JWT token
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLogin'
+            example:
+              login: john_doe
+              password: securepassword123
+      responses:
+        '200':
+          description: Successfully logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                detail: Invalid login or password
+
+  /api/users:
+    post:
+      tags:
+        - Users
+      summary: Create new user
+      description: Creates a new user account with the provided data
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: User already exists
+
+  /api/users/login/{login}:
+    get:
+      tags:
+        - Users
+      summary: Search user by login
+      description: Returns user information for the specified login
+      operationId: getUserByLogin
+      parameters:
+        - name: login
+          in: path
+          required: true
+          schema:
+            type: string
+          description: User login to search for
+      responses:
+        '200':
+          description: User found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/users/search:
+    get:
+      tags:
+        - Users
+      summary: Search user by name mask
+      description: Returns users matching the specified first name and/or last name pattern
+      operationId: searchUsers
+      parameters:
+        - name: firstName
+          in: query
+          required: false
+          schema:
+            type: string
+          description: First name pattern (partial match)
+        - name: lastName
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Last name pattern (partial match)
+      responses:
+        '200':
+          description: List of matching users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserResponse'
+        '400':
+          description: At least one parameter required
+
+  /api/folders:
+    post:
+      tags:
+        - Folders
+      summary: Create new email folder
+      description: Creates a new folder for the authenticated user
+      operationId: createFolder
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FolderCreate'
+            example:
+              name: Inbox
+              userId: 1
+      responses:
+        '201':
+          description: Folder created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderResponse'
+        '401':
+          description: Not authenticated
+        '404':
+          description: User not found
+
+    get:
+      tags:
+        - Folders
+      summary: Get all folders
+      description: Returns a list of all folders (protected endpoint)
+      operationId: getAllFolders
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of all folders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FolderResponse'
+        '401':
+          description: Not authenticated
+
+  /api/folders/{folder_id}/messages:
+    post:
+      tags:
+        - Messages
+      summary: Create new message in folder
+      description: Creates a new email message in the specified folder
+      operationId: createMessage
+      parameters:
+        - name: folder_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the folder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageCreate'
+            example:
+              subject: Hello
+              body: This is the message body
+              sender: sender@example.com
+              recipient: recipient@example.com
+      responses:
+        '201':
+          description: Message created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Folder not found
+
+    get:
+      tags:
+        - Messages
+      summary: Get all messages in folder
+      description: Returns all messages in the specified folder
+      operationId: getMessagesInFolder
+      parameters:
+        - name: folder_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the folder
+      responses:
+        '200':
+          description: List of messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Folder not found
+
+  /api/messages/{message_id}:
+    get:
+      tags:
+        - Messages
+      summary: Get message by code (ID)
+      description: Returns the message with the specified ID
+      operationId: getMessageById
+      parameters:
+        - name: message_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          description: ID of the message
+      responses:
+        '200':
+          description: Message found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Message not found
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Returns the health status of the API
+      operationId: healthCheck
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from /api/auth/login or /api/auth/register
+
+  schemas:
+    UserCreate:
+      type: object
+      required:
+        - login
+        - firstName
+        - lastName
+        - password
+      properties:
+        login:
+          type: string
+          description: Unique user login
+          example: john_doe
+        firstName:
+          type: string
+          description: User's first name
+          example: John
+        lastName:
+          type: string
+          description: User's last name
+          example: Doe
+        password:
+          type: string
+          description: User's password
+          example: securepassword123
+
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: User ID
+          example: 1
+        login:
+          type: string
+          description: User login
+          example: john_doe
+        firstName:
+          type: string
+          description: User's first name
+          example: John
+        lastName:
+          type: string
+          description: User's last name
+          example: Doe
+
+    UserLogin:
+      type: object
+      required:
+        - login
+        - password
+      properties:
+        login:
+          type: string
+          example: john_doe
+        password:
+          type: string
+          example: securepassword123
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT access token
+        token_type:
+          type: string
+          description: Token type
+          example: bearer
+
+    FolderCreate:
+      type: object
+      required:
+        - name
+        - userId
+      properties:
+        name:
+          type: string
+          description: Folder name
+          example: Inbox
+        userId:
+          type: integer
+          description: ID of the user who owns the folder
+          example: 1
+
+    FolderResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Folder ID
+          example: 1
+        name:
+          type: string
+          description: Folder name
+          example: Inbox
+        userId:
+          type: integer
+          description: Owner user ID
+          example: 1
+
+    MessageCreate:
+      type: object
+      required:
+        - subject
+        - body
+        - sender
+        - recipient
+      properties:
+        subject:
+          type: string
+          description: Message subject
+          example: Hello
+        body:
+          type: string
+          description: Message body content
+          example: This is the message body
+        sender:
+          type: string
+          description: Sender email address
+          example: sender@example.com
+        recipient:
+          type: string
+          description: Recipient email address
+          example: recipient@example.com
+
+    MessageResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Message ID
+          example: 1
+        folderId:
+          type: integer
+          description: ID of the containing folder
+          example: 1
+        subject:
+          type: string
+          description: Message subject
+          example: Hello
+        body:
+          type: string
+          description: Message body
+          example: This is the message body
+        sender:
+          type: string
+          description: Sender email
+          example: sender@example.com
+        recipient:
+          type: string
+          description: Recipient email
+          example: recipient@example.com
+        createdAt:
+          type: string
+          format: date-time
+          description: Message creation timestamp
+          example: 2024-01-15T10:30:00
+
+    Error:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Error message
+          example: User not found
