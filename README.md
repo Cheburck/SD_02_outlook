@@ -1,77 +1,80 @@
-# Email REST API (Outlook)
+# Система хранения файлов
 
-REST API для управления почтой. Курс "Архитектура программных систем".
+REST API для управления файлами и папками с использованием PostgreSQL.
 
-## Сущности
+## Схема базы данных
 
-- **Folder** - почтовая папка
-- **Message** - письмо
-- **User** - пользователь
+### Таблицы
 
-## Endpoints
+**users** - пользователи:
+- id (SERIAL PRIMARY KEY)
+- login (VARCHAR UNIQUE NOT NULL)
+- first_name, last_name (VARCHAR NOT NULL)
+- password_hash (VARCHAR NOT NULL)
+- created_at (TIMESTAMP)
 
-| Метод | Endpoint | Auth |
-|-------|----------|------|
-| POST | `/api/auth/register` | - |
-| POST | `/api/auth/login` | - |
-| POST | `/api/users` | - |
-| GET | `/api/users/login/{login}` | - |
-| GET | `/api/users/search` | - |
-| POST | `/api/folders` | + |
-| GET | `/api/folders` | + |
-| POST | `/api/folders/{folder_id}/messages` | - |
-| GET | `/api/folders/{folder_id}/messages` | - |
-| GET | `/api/messages/{message_id}` | - |
+**folders** - папки:
+- id (SERIAL PRIMARY KEY)
+- name (VARCHAR NOT NULL)
+- user_id (INTEGER REFERENCES users)
+- created_at (TIMESTAMP)
 
-## Технологии
+**messages** - файлы:
+- id (SERIAL PRIMARY KEY)
+- folder_id (INTEGER REFERENCES folders)
+- subject, body, sender, recipient
+- created_at (TIMESTAMP)
 
-Python, FastAPI, Pydantic, PyJWT, Passlib, Uvicorn
+### Индексы
+- idx_users_login, idx_users_name
+- idx_folders_user_id
+- idx_messages_folder_id, idx_messages_subject
 
 ## Запуск
-
-```bash
-pip install -r requirements.txt
-cd src
-python3 -m uvicorn main:app --reload
-```
-
-Swagger: http://localhost:8000/docs
-
-## Docker
 
 ```bash
 docker-compose up --build
 ```
 
+API: http://localhost:8000  
+PostgreSQL: localhost:5432
+
+## API Endpoints
+
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| POST | /api/auth/register | Регистрация |
+| POST | /api/auth/login | Вход |
+| POST | /api/users | Создание пользователя |
+| GET | /api/users/login/{login} | Поиск по логину |
+| GET | /api/users/search | Поиск по имени |
+| POST | /api/folders | Создание папки |
+| GET | /api/folders | Список папок |
+| DELETE | /api/folders/{id} | Удаление папки |
+| POST | /api/folders/{id}/messages | Создание файла |
+| GET | /api/folders/{id}/messages | Файлы в папке |
+| GET | /api/messages/{id} | Файл по ID |
+| GET | /api/messages?subject=name | Файл по имени |
+| DELETE | /api/messages/{id} | Удаление файла |
+
 ## Примеры
 
-Регистрация:
 ```bash
-curl -X POST "http://localhost:8000/api/auth/register" -H "Content-Type: application/json" -d '{"login": "user1", "firstName": "John", "lastName": "Doe", "password": "pass123"}'
+# Регистрация
+curl -X POST http://localhost:8000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"login":"user","firstName":"Test","lastName":"User","password":"pass"}'
+
+# Создание папки
+curl -X POST http://localhost:8000/api/folders \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Docs","userId":1}'
 ```
 
-Логин:
-```bash
-curl -X POST "http://localhost:8000/api/auth/login" -H "Content-Type: application/json" -d '{"login": "user1", "password": "pass123"}'
-```
+## Файлы
 
-Создание папки (нужен токен):
-```bash
-curl -X POST "http://localhost:8000/api/folders" -H "Content-Type: application/json" -H "Authorization: Bearer TOKEN" -d '{"name": "Inbox", "userId": 1}'
-```
-
-Создание письма:
-```bash
-curl -X POST "http://localhost:8000/api/folders/1/messages" -H "Content-Type: application/json" -d '{"subject": "Hi", "body": "Hello", "sender": "a@b.com", "recipient": "c@d.com"}'
-```
-
-## Тесты
-
-```bash
-pip install pytest httpx
-python3 -m pytest tests/test_api.py -v
-```
-
-## Автор
-
-Ситдиков Ришат М8О-102СВ-25
+- `schema.sql` - схема БД
+- `data.sql` - тестовые данные
+- `queries.sql` - SQL запросы
+- `optimization.md` - оптимизация

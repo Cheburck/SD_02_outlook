@@ -1,2 +1,8 @@
 /.pytest_cache
 /.history
+/__pycache__
+/*.pyc
+.env
+*.db
+.DS_Store
+.postgres_data

@@ -1,10 +1,19 @@
-# Основное приложение FastAPI для Email системы
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
-app = FastAPI(title="Email REST API", version="1.0.0")
+from database import db
 
-# Настройка CORS
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await db.connect()
+    yield
+    await db.disconnect()
+
+
+app = FastAPI(title="File Storage API", version="1.0.0", lifespan=lifespan)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -13,7 +22,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Подключаем роуты
 from routes.auth import router as auth_router
 from routes.users import router as users_router
 from routes.folders import router as folders_router
@@ -25,7 +33,6 @@ app.include_router(folders_router)
 app.include_router(messages_router)
 
 
-# Health check
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}

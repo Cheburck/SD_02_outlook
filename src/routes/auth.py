@@ -14,7 +14,7 @@ router = APIRouter()
 async def register(user_data: UserCreate):
     try:
         password_hash = sha256_crypt.hash(user_data.password)
-        user = db.create_user(
+        user = await db.create_user(
             login=user_data.login,
             firstName=user_data.firstName,
             lastName=user_data.lastName,
@@ -28,7 +28,7 @@ async def register(user_data: UserCreate):
 
 @router.post("/api/auth/login", response_model=TokenResponse)
 async def login(credentials: UserLogin):
-    user = db.get_user_by_login(credentials.login)
+    user = await db.get_user_by_login(credentials.login)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid login or password")
     

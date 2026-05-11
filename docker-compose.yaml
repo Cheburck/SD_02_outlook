@@ -1,14 +1,35 @@
-version: '3.8'
-
 services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: filestorage
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/1-schema.sql
+      - ./data.sql:/docker-entrypoint-initdb.d/2-data.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   api:
     build: .
     ports:
       - "8000:8000"
     environment:
       - SECRET_KEY=your-secret-key-change-in-production
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/filestorage
     volumes:
       - ./src:/app/src
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -16,3 +37,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+volumes:
+  postgres_data:
