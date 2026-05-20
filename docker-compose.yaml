@@ -1,14 +1,93 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:15-alpine
+    container_name: outlook_db
+    environment:
+      POSTGRES_DB: outlook_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./db/data.sql:/docker-entrypoint-initdb.d/02_data.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: outlook_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: outlook_rabbitmq
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   api:
     build: .
+    container_name: outlook_api
     ports:
       - "8000:8000"
     environment:
       - SECRET_KEY=your-secret-key-change-in-production
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/outlook_db
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=outlook_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_DB=0
+      - REDIS_URL=redis://redis:6379/0
+      - RATE_LIMIT_DEFAULT=100/minute
+      - RATE_LIMIT_AUTH=10/minute
+      - RATE_LIMIT_REGISTER=5/minute
+      - RATE_LIMIT_SEARCH=30/minute
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USERNAME=guest
+      - RABBITMQ_PASSWORD=guest
     volumes:
       - ./src:/app/src
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -16,3 +95,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
