@@ -32,7 +32,7 @@ def get_current_user_from_token(token: str) -> Optional[dict]:
     user_id = payload.get("sub")
     if user_id is None:
         return None
-    return {"user_id": int(user_id), "login": payload.get("login")}
+    return {"user_id": user_id, "login": payload.get("login")}
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:

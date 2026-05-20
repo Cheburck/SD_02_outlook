@@ -1,14 +1,40 @@
 version: '3.8'
 
 services:
+  mongodb:
+    image: mongo:7
+    container_name: email_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: email_db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+      - ./data.json:/data/data.json:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - email_network
+
   api:
     build: .
+    container_name: email_api
     ports:
       - "8000:8000"
     environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_DATABASE=email_db
       - SECRET_KEY=your-secret-key-change-in-production
     volumes:
       - ./src:/app/src
+    depends_on:
+      mongodb:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -16,3 +42,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    networks:
+      - email_network
+
+volumes:
+  mongo_data:
+    driver: local
+
+networks:
+  email_network:
+    driver: bridge

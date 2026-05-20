@@ -1,0 +1,258 @@
+{
+  "users": [
+    {
+      "login": "john.doe",
+      "firstName": "John",
+      "lastName": "Doe",
+      "password_hash": "$5$rounds=535000$abc123$hashed_password_1",
+      "createdAt": "2025-01-15T10:00:00Z"
+    },
+    {
+      "login": "jane.smith",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "password_hash": "$5$rounds=535000$def456$hashed_password_2",
+      "createdAt": "2025-01-16T11:30:00Z"
+    },
+    {
+      "login": "bob.wilson",
+      "firstName": "Bob",
+      "lastName": "Wilson",
+      "password_hash": "$5$rounds=535000$ghi789$hashed_password_3",
+      "createdAt": "2025-01-17T09:15:00Z"
+    },
+    {
+      "login": "alice.johnson",
+      "firstName": "Alice",
+      "lastName": "Johnson",
+      "password_hash": "$5$rounds=535000$jkl012$hashed_password_4",
+      "createdAt": "2025-01-18T14:45:00Z"
+    },
+    {
+      "login": "charlie.brown",
+      "firstName": "Charlie",
+      "lastName": "Brown",
+      "password_hash": "$5$rounds=535000$mno345$hashed_password_5",
+      "createdAt": "2025-01-19T08:20:00Z"
+    },
+    {
+      "login": "diana.lee",
+      "firstName": "Diana",
+      "lastName": "Lee",
+      "password_hash": "$5$rounds=535000$pqr678$hashed_password_6",
+      "createdAt": "2025-01-20T16:00:00Z"
+    },
+    {
+      "login": "edward.kim",
+      "firstName": "Edward",
+      "lastName": "Kim",
+      "password_hash": "$5$rounds=535000$stu901$hashed_password_7",
+      "createdAt": "2025-01-21T12:30:00Z"
+    },
+    {
+      "login": "fiona.garcia",
+      "firstName": "Fiona",
+      "lastName": "Garcia",
+      "password_hash": "$5$rounds=535000$vwx234$hashed_password_8",
+      "createdAt": "2025-01-22T10:45:00Z"
+    },
+    {
+      "login": "george.martinez",
+      "firstName": "George",
+      "lastName": "Martinez",
+      "password_hash": "$5$rounds=535000$yza567$hashed_password_9",
+      "createdAt": "2025-01-23T15:15:00Z"
+    },
+    {
+      "login": "helen.taylor",
+      "firstName": "Helen",
+      "lastName": "Taylor",
+      "password_hash": "$5$rounds=535000$bcd890$hashed_password_10",
+      "createdAt": "2025-01-24T09:00:00Z"
+    }
+  ],
+  "folders": [
+    {
+      "name": "Inbox",
+      "userId": 1,
+      "createdAt": "2025-01-15T10:05:00Z"
+    },
+    {
+      "name": "Sent Items",
+      "userId": 1,
+      "createdAt": "2025-01-15T10:06:00Z"
+    },
+    {
+      "name": "Drafts",
+      "userId": 1,
+      "createdAt": "2025-01-15T10:07:00Z"
+    },
+    {
+      "name": "Inbox",
+      "userId": 2,
+      "createdAt": "2025-01-16T11:35:00Z"
+    },
+    {
+      "name": "Sent Items",
+      "userId": 2,
+      "createdAt": "2025-01-16T11:36:00Z"
+    },
+    {
+      "name": "Archive",
+      "userId": 2,
+      "createdAt": "2025-01-16T11:37:00Z"
+    },
+    {
+      "name": "Inbox",
+      "userId": 3,
+      "createdAt": "2025-01-17T09:20:00Z"
+    },
+    {
+      "name": "Work",
+      "userId": 3,
+      "createdAt": "2025-01-17T09:21:00Z"
+    },
+    {
+      "name": "Personal",
+      "userId": 4,
+      "createdAt": "2025-01-18T14:50:00Z"
+    },
+    {
+      "name": "Spam",
+      "userId": 4,
+      "createdAt": "2025-01-18T14:51:00Z"
+    },
+    {
+      "name": "Inbox",
+      "userId": 5,
+      "createdAt": "2025-01-19T08:25:00Z"
+    },
+    {
+      "name": "Projects",
+      "userId": 5,
+      "createdAt": "2025-01-19T08:26:00Z"
+    }
+  ],
+  "messages": [
+    {
+      "folderId": 1,
+      "subject": "Welcome to Email System",
+      "body": "Hello! Welcome to our email system. We hope you enjoy using it.",
+      "sender": "admin@email.com",
+      "recipient": "john.doe@email.com",
+      "createdAt": "2025-01-15T10:10:00Z"
+    },
+    {
+      "folderId": 1,
+      "subject": "Meeting Tomorrow",
+      "body": "Hi John, let's meet tomorrow at 10 AM to discuss the project.",
+      "sender": "jane.smith@email.com",
+      "recipient": "john.doe@email.com",
+      "createdAt": "2025-01-15T14:30:00Z"
+    },
+    {
+      "folderId": 1,
+      "subject": "Project Update",
+      "body": "Here's the weekly project update. Everything is on track.",
+      "sender": "bob.wilson@email.com",
+      "recipient": "john.doe@email.com",
+      "createdAt": "2025-01-16T09:00:00Z"
+    },
+    {
+      "folderId": 2,
+      "subject": "Re: Meeting Tomorrow",
+      "body": "Sure, 10 AM works for me. See you then!",
+      "sender": "john.doe@email.com",
+      "recipient": "jane.smith@email.com",
+      "createdAt": "2025-01-15T15:00:00Z"
+    },
+    {
+      "folderId": 2,
+      "subject": "Quarterly Report",
+      "body": "Please find attached the quarterly report for review.",
+      "sender": "john.doe@email.com",
+      "recipient": "alice.johnson@email.com",
+      "createdAt": "2025-01-17T11:00:00Z"
+    },
+    {
+      "folderId": 4,
+      "subject": "Invoice #12345",
+      "body": "Your invoice for this month is attached.",
+      "sender": "billing@company.com",
+      "recipient": "jane.smith@email.com",
+      "createdAt": "2025-01-16T12:00:00Z"
+    },
+    {
+      "folderId": 4,
+      "subject": "Team Lunch Friday",
+      "body": "Hey team, let's have lunch this Friday at the new Italian place.",
+      "sender": "charlie.brown@email.com",
+      "recipient": "jane.smith@email.com",
+      "createdAt": "2025-01-17T10:30:00Z"
+    },
+    {
+      "folderId": 5,
+      "subject": "Re: Team Lunch Friday",
+      "body": "Count me in! I love Italian food.",
+      "sender": "jane.smith@email.com",
+      "recipient": "charlie.brown@email.com",
+      "createdAt": "2025-01-17T11:15:00Z"
+    },
+    {
+      "folderId": 7,
+      "subject": "Server Maintenance",
+      "body": "Scheduled maintenance this weekend. Expect downtime on Sunday.",
+      "sender": "it@company.com",
+      "recipient": "bob.wilson@email.com",
+      "createdAt": "2025-01-17T16:00:00Z"
+    },
+    {
+      "folderId": 8,
+      "subject": "Code Review Request",
+      "body": "Can you review my PR for the new feature?",
+      "sender": "bob.wilson@email.com",
+      "recipient": "edward.kim@email.com",
+      "createdAt": "2025-01-18T09:30:00Z"
+    },
+    {
+      "folderId": 9,
+      "subject": "Vacation Request",
+      "body": "I'd like to request vacation time for next month.",
+      "sender": "alice.johnson@email.com",
+      "recipient": "hr@company.com",
+      "createdAt": "2025-01-18T15:00:00Z"
+    },
+    {
+      "folderId": 10,
+      "subject": "Spam: Win a Million Dollars!",
+      "body": "You've been selected to win! Click here to claim your prize.",
+      "sender": "scammer@spam.com",
+      "recipient": "alice.johnson@email.com",
+      "createdAt": "2025-01-19T03:00:00Z"
+    },
+    {
+      "folderId": 11,
+      "subject": "New Task Assignment",
+      "body": "You've been assigned to the new mobile app project.",
+      "sender": "manager@company.com",
+      "recipient": "charlie.brown@email.com",
+      "createdAt": "2025-01-19T08:30:00Z"
+    },
+    {
+      "folderId": 12,
+      "subject": "API Documentation",
+      "body": "Here's the updated API documentation for the project.",
+      "sender": "charlie.brown@email.com",
+      "recipient": "fiona.garcia@email.com",
+      "createdAt": "2025-01-20T10:00:00Z"
+    },
+    {
+      "folderId": 1,
+      "subject": "Reminder: Deadline Approaching",
+      "body": "This is a reminder that the project deadline is approaching.",
+      "sender": "project.manager@company.com",
+      "recipient": "john.doe@email.com",
+      "createdAt": "2025-01-20T14:00:00Z"
+    }
+  ]
+}

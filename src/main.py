@@ -1,8 +1,24 @@
 # Основное приложение FastAPI для Email системы
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Email REST API", version="1.0.0")
+from database import db
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Управление жизненным циклом приложения"""
+    # Подключение к MongoDB при запуске
+    await db.connect()
+    print("Connected to MongoDB")
+    yield
+    # Отключение от MongoDB при остановке
+    await db.disconnect()
+    print("Disconnected from MongoDB")
+
+
+app = FastAPI(title="Email REST API", version="1.0.0", lifespan=lifespan)
 
 # Настройка CORS
 app.add_middleware(
@@ -28,7 +44,7 @@ app.include_router(messages_router)
 # Health check
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    return {"status": "healthy", "database": "mongodb"}
 
 
 if __name__ == "__main__":
