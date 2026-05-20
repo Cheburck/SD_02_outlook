@@ -1,11 +1,14 @@
 from fastapi import APIRouter, HTTPException, status, Depends
-from passlib.hash import sha256_crypt
 
-from models.user_create import UserCreate
 from models.user_login import UserLogin
+from models.user_create import UserCreate
 from models.token_response import TokenResponse
+from models.user_response import UserResponse
 from db.postgres import get_db_connection, Database
+from cache import cache
+from rate_limiter import limiter, RATE_LIMITS
 from auth import create_access_token
+from passlib.hash import sha256_crypt
 
 router = APIRouter()
 
@@ -19,15 +22,47 @@ def get_db() -> Database:
         db.close()
 
 
-@router.post("/api/auth/register", response_model=TokenResponse)
-async def register(user_data: UserCreate, db: Database = Depends(get_db)):
+@router.post("/api/auth/login", response_model=TokenResponse)
+@limiter.limit(RATE_LIMITS['auth_login'])
+async def login(request, login_data: UserLogin, db: Database = Depends(get_db)):
+    # Try to get user from cache
+    cache_key = f"user:login:{login_data.login}"
+    user = cache.get(cache_key)
+    
+    if not user:
+        # Get from database
+        user = db.get_user_by_login(login_data.login)
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+        # Cache user data (with password_hash for verification)
+        user_data = {
+            "id": user["id"],
+            "login": user["login"],
+            "firstName": user["first_name"],
+            "lastName": user["last_name"],
+            "password_hash": user["password_hash"]
+        }
+        cache.set(cache_key, user_data, ttl=60)
+    
+    # Verify password
+    if not sha256_crypt.verify(login_data.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    # Generate token
+    token = create_access_token(data={"sub": user["login"], "user_id": user["id"]})
+    
+    return TokenResponse(access_token=token, token_type="bearer")
+
+
+@router.post("/api/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(RATE_LIMITS['auth_register'])
+async def register(request, user_data: UserCreate, db: Database = Depends(get_db)):
     # Check if user already exists
     if db.user_exists_by_login(user_data.login):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"User with login '{user_data.login}' already exists"
-        )
+        raise HTTPException(status_code=400, detail=f"User with login '{user_data.login}' already exists")
     
+    # Create user
     password_hash = sha256_crypt.hash(user_data.password)
     user = db.create_user(
         login=user_data.login,
@@ -35,17 +70,14 @@ async def register(user_data: UserCreate, db: Database = Depends(get_db)):
         first_name=user_data.firstName,
         last_name=user_data.lastName
     )
-    access_token = create_access_token(data={"sub": str(user["id"]), "login": user["login"]})
-    return {"access_token": access_token, "token_type": "bearer"}
-
-
-@router.post("/api/auth/login", response_model=TokenResponse)
-async def login(credentials: UserLogin, db: Database = Depends(get_db)):
-    user = db.get_user_by_login(credentials.login)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid login or password")
     
-    if not sha256_crypt.verify(credentials.password, user["password_hash"]):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid login or password")
+    # Invalidate cache
+    cache.invalidate_user(user['id'])
     
-    return {"access_token": create_access_token(data={"sub": str(user["id"]), "login": user["login"]}), "token_type": "bearer"}
+    return UserResponse(
+        id=user["id"],
+        login=user["login"],
+        firstName=user["first_name"],
+        lastName=user["last_name"],
+        createdAt=user["created_at"]
+    )

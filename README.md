@@ -1,11 +1,11 @@
 # Email REST API (Outlook)
 
-REST API для управления почтой с базой данных PostgreSQL. Курс "Архитектура программных систем".
+REST API для управления почтой с базой данных PostgreSQL и Redis кешированием. Курс "Архитектура программных систем".
 
-## Домашнее задание №3
+## Домашние задания
 
-Проектирование и оптимизация реляционной базы данных для системы электронной почты.
-
+- **ДЗ №3**: Проектирование и оптимизация реляционной базы данных
+- **ДЗ №5**: Оптимизация производительности через кеширование и rate limiting
 
 ## Сущности
 
@@ -61,28 +61,36 @@ REST API для управления почтой с базой данных Pos
 | idx_messages_recipient | messages | recipient | Поиск по получателю |
 | idx_messages_created_at | messages | created_at DESC | Сортировка по дате |
 
+**Почему выбраны эти индексы:**
+- `login` — UNIQUE для быстрой проверки при аутентификации
+- `first_name`, `last_name` — для поиска пользователей по маске имени
+- `user_id` в folders — для быстрого получения папок пользователя
+- `folder_id` в messages — для получения всех писем в папке
+- `sender`, `recipient` — для поиска писем по отправителю/получателю
+- `created_at DESC` — для сортировки писем по дате (новые сверху)
 
 ## Endpoints API
 
-| Метод | Endpoint | Auth | Описание |
-|-------|----------|------|----------|
-| POST | `/api/auth/register` | - | Регистрация пользователя |
-| POST | `/api/auth/login` | - | Аутентификация |
-| POST | `/api/users` | - | Создание пользователя |
-| GET | `/api/users/login/{login}` | - | Поиск по логину |
-| GET | `/api/users/search?firstName=&lastName=` | - | Поиск по имени/фамилии |
-| POST | `/api/folders` | + | Создание папки |
-| GET | `/api/folders` | + | Все папки |
-| POST | `/api/folders/{folder_id}/messages` | - | Создание письма |
-| GET | `/api/folders/{folder_id}/messages` | - | Письма в папке |
-| GET | `/api/messages/{message_id}` | - | Письмо по ID |
+| Метод | Endpoint | Rate Limit | Кеш | Описание |
+|-------|----------|------------|-----|----------|
+| POST | `/api/auth/register` | 5/мин | ❌ | Регистрация пользователя |
+| POST | `/api/auth/login` | 10/мин | ✅ | Аутентификация |
+| POST | `/api/users` | 10/мин | ❌ | Создание пользователя |
+| GET | `/api/users/login/{login}` | 100/мин | ✅ (5 мин) | Поиск по логину |
+| GET | `/api/users/search` | 30/мин | ✅ (1 мин) | Поиск по имени/фамилии |
+| POST | `/api/folders` | 20/мин | ❌ | Создание папки |
+| GET | `/api/folders` | 100/мин | ✅ (1 мин) | Все папки |
+| GET | `/api/users/{id}/folders` | 100/мин | ✅ (5 мин) | Папки пользователя |
+| POST | `/api/messages` | 30/мин | ❌ | Создание письма |
+| GET | `/api/folders/{id}/messages` | 100/мин | ✅ (1 мин) | Письма в папке |
+| GET | `/api/messages/{id}` | 100/мин | ✅ (2 мин) | Письмо по ID |
 
 ## Быстрый старт
 
-### Вариант 1: Docker Compose (рекомендуется)
+### Docker Compose (рекомендуется)
 
 ```bash
-# Запуск PostgreSQL и API
+# Запуск PostgreSQL, Redis и API
 docker-compose up --build
 
 # Остановка
@@ -90,9 +98,10 @@ docker-compose down
 ```
 
 API доступно на: http://localhost:8000  
-PostgreSQL на: localhost:5432
+PostgreSQL на: localhost:5432  
+Redis на: localhost:6379
 
-### Вариант 2: Локальный запуск
+### Локальный запуск
 
 #### 1. Установка зависимостей
 
@@ -100,10 +109,10 @@ PostgreSQL на: localhost:5432
 pip install -r requirements.txt
 ```
 
-#### 2. Запуск PostgreSQL
+#### 2. Запуск PostgreSQL и Redis
 
 ```bash
-# Через Docker
+# PostgreSQL
 docker run -d --name outlook_db \
   -e POSTGRES_DB=outlook_db \
   -e POSTGRES_USER=postgres \
@@ -111,39 +120,86 @@ docker run -d --name outlook_db \
   -p 5432:5432 \
   postgres:15-alpine
 
-# Или используйте локальную установку PostgreSQL
+# Redis
+docker run -d --name outlook_redis \
+  -p 6379:6379 \
+  redis:7-alpine
 ```
 
 #### 3. Создание базы данных
 
 ```bash
-# Подключение к БД
-psql -h localhost -U postgres -d outlook_db
-
-# Создание схемы
-\i db/schema.sql
-
-# Загрузка тестовых данных
-\i db/data.sql
+psql -h localhost -U postgres -d outlook_db -f db/schema.sql
+psql -h localhost -U postgres -d outlook_db -f db/data.sql
 ```
 
 #### 4. Запуск API
 
 ```bash
-# Установка переменных окружения
 export DB_HOST=localhost
-export DB_PORT=5432
 export DB_NAME=outlook_db
 export DB_USER=postgres
 export DB_PASSWORD=postgres
+export REDIS_HOST=localhost
+export REDIS_PORT=6379
 export SECRET_KEY=your-secret-key
 
-# Запуск сервера
 cd src
 python3 -m uvicorn main:app --reload
 ```
 
 Swagger UI: http://localhost:8000/docs
+
+---
+
+## Стратегия кеширования
+
+Используется паттерн **Cache-Aside (Lazy Loading)**:
+
+1. При запросе сначала проверяется Redis кеш
+2. При попадании — данные возвращаются из кеша
+3. При промахе — данные читаются из БД и записываются в кеш
+
+### Кешируемые данные
+
+| Данные | Ключ кеша | TTL |
+|--------|-----------|-----|
+| Пользователь по логину | `user:login:{login}` | 5 мин |
+| Письмо по ID | `message:{id}` | 2 мин |
+| Письма в папке | `folder:{id}:messages` | 1 мин |
+| Папки пользователя | `user:{id}:folders` | 5 мин |
+
+### Инвалидация кеша
+
+При создании/обновлении данных соответствующие ключи кеша удаляются:
+- Создание письма → инвалидация `folder:{id}:messages`
+- Создание папки → инвалидация `user:{id}:folders`
+- Создание пользователя → инвалидация `user:{id}:folders`
+
+## Rate Limiting
+
+Используется **slowapi** с Redis бэкендом.
+
+### Лимиты
+
+| Endpoint | Лимит | Алгоритм | Обоснование |
+|----------|-------|----------|-------------|
+| POST /api/auth/login | 10/мин | Token Bucket | Защита от брутфорса |
+| POST /api/auth/register | 5/мин | Fixed Window | Защита от спама |
+| GET /api/users/search | 30/мин | Sliding Window | Защита от злоупотребления поиском |
+| Остальные GET | 100/мин | Sliding Window | Стандартные лимиты |
+| Остальные POST | 50/мин | Sliding Window | Ограничение записи |
+
+### Заголовки
+
+Все ответы содержат заголовки:
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1700000060
+```
+
+При превышении лимита возвращается **429 Too Many Requests** с заголовком `Retry-After`.
 
 ---
 
@@ -154,7 +210,7 @@ Swagger UI: http://localhost:8000/docs
 ```bash
 curl -X POST "http://localhost:8000/api/auth/register" \
   -H "Content-Type: application/json" \
-  -d '{"login": "user1", "firstName": "John", "lastName": "Doe", "password": "pass123"}'
+  -d '{"login": "user1", "password": "pass123"}'
 ```
 
 ### Логин
@@ -165,40 +221,30 @@ curl -X POST "http://localhost:8000/api/auth/login" \
   -d '{"login": "user1", "password": "pass123"}'
 ```
 
+### Поиск пользователей
+
+```bash
+# По логину
+curl "http://localhost:8000/api/users/login/user1"
+
+# По имени
+curl "http://localhost:8000/api/users/search?firstName=John"
+```
+
 ### Создание папки
 
 ```bash
-# Получить токен
-TOKEN=$(curl -X POST "http://localhost:8000/api/auth/login" \
-  -H "Content-Type: application/json" \
-  -d '{"login": "user1", "password": "pass123"}' | jq -r '.token')
-
-# Создать папку
 curl -X POST "http://localhost:8000/api/folders" \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
   -d '{"name": "Inbox", "userId": 1}'
 ```
 
 ### Создание письма
 
 ```bash
-curl -X POST "http://localhost:8000/api/folders/1/messages" \
+curl -X POST "http://localhost:8000/api/messages" \
   -H "Content-Type: application/json" \
-  -d '{"subject": "Hello", "body": "Test message", "sender": "a@b.com", "recipient": "c@d.com"}'
-```
-
-### Поиск пользователей
-
-```bash
-# По логину
-curl "http://localhost:8000/api/users/login/john.doe"
-
-# По имени
-curl "http://localhost:8000/api/users/search?firstName=John"
-
-# По фамилии
-curl "http://localhost:8000/api/users/search?lastName=Doe"
+  -d '{"subject": "Hello", "body": "Test message", "sender": "a@b.com", "recipient": "c@d.com", "folderId": 1}'
 ```
 
 ## Тесты
