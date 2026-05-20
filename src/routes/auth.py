@@ -1,33 +1,46 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from passlib.hash import sha256_crypt
 
 from models.user_create import UserCreate
 from models.user_login import UserLogin
 from models.token_response import TokenResponse
-from database import db
+from db.postgres import get_db_connection, Database
 from auth import create_access_token
 
 router = APIRouter()
 
 
-@router.post("/api/auth/register", response_model=TokenResponse)
-async def register(user_data: UserCreate):
+def get_db() -> Database:
+    """Dependency to get database connection."""
+    db = get_db_connection()
     try:
-        password_hash = sha256_crypt.hash(user_data.password)
-        user = db.create_user(
-            login=user_data.login,
-            firstName=user_data.firstName,
-            lastName=user_data.lastName,
-            password_hash=password_hash
+        yield db
+    finally:
+        db.close()
+
+
+@router.post("/api/auth/register", response_model=TokenResponse)
+async def register(user_data: UserCreate, db: Database = Depends(get_db)):
+    # Check if user already exists
+    if db.user_exists_by_login(user_data.login):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"User with login '{user_data.login}' already exists"
         )
-        access_token = create_access_token(data={"sub": str(user["id"]), "login": user["login"]})
-        return {"access_token": access_token, "token_type": "bearer"}
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    
+    password_hash = sha256_crypt.hash(user_data.password)
+    user = db.create_user(
+        login=user_data.login,
+        password_hash=password_hash,
+        first_name=user_data.firstName,
+        last_name=user_data.lastName
+    )
+    access_token = create_access_token(data={"sub": str(user["id"]), "login": user["login"]})
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 @router.post("/api/auth/login", response_model=TokenResponse)
-async def login(credentials: UserLogin):
+async def login(credentials: UserLogin, db: Database = Depends(get_db)):
     user = db.get_user_by_login(credentials.login)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid login or password")
