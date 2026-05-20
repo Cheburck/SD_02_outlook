@@ -1,4 +1,5 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
+from datetime import datetime
 
 from models.user_login import UserLogin
 from models.user_create import UserCreate
@@ -9,6 +10,9 @@ from cache import cache
 from rate_limiter import limiter, RATE_LIMITS
 from auth import create_access_token
 from passlib.hash import sha256_crypt
+from events.events import UserCreated
+from events.publisher import get_publisher
+from events.config import RabbitMQConfig
 
 router = APIRouter()
 
@@ -24,7 +28,7 @@ def get_db() -> Database:
 
 @router.post("/api/auth/login", response_model=TokenResponse)
 @limiter.limit(RATE_LIMITS['auth_login'])
-async def login(request, login_data: UserLogin, db: Database = Depends(get_db)):
+async def login(login_data: UserLogin, request: Request, db: Database = Depends(get_db)):
     # Try to get user from cache
     cache_key = f"user:login:{login_data.login}"
     user = cache.get(cache_key)
@@ -57,7 +61,7 @@ async def login(request, login_data: UserLogin, db: Database = Depends(get_db)):
 
 @router.post("/api/auth/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(RATE_LIMITS['auth_register'])
-async def register(request, user_data: UserCreate, db: Database = Depends(get_db)):
+async def register(user_data: UserCreate, request: Request, db: Database = Depends(get_db)):
     # Check if user already exists
     if db.user_exists_by_login(user_data.login):
         raise HTTPException(status_code=400, detail=f"User with login '{user_data.login}' already exists")
@@ -73,6 +77,18 @@ async def register(request, user_data: UserCreate, db: Database = Depends(get_db
     
     # Invalidate cache
     cache.invalidate_user(user['id'])
+    
+    # Publish UserCreated event
+    publisher = get_publisher()
+    if publisher:
+        event = UserCreated(
+            user_id=user["id"],
+            login=user["login"],
+            first_name=user["first_name"],
+            last_name=user["last_name"],
+            created_at=user["created_at"],
+        )
+        publisher.publish(event, RabbitMQConfig.ROUTING_USER_CREATED)
     
     return UserResponse(
         id=user["id"],

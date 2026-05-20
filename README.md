@@ -6,6 +6,7 @@ REST API для управления почтой с базой данных Pos
 
 - **ДЗ №3**: Проектирование и оптимизация реляционной базы данных
 - **ДЗ №5**: Оптимизация производительности через кеширование и rate limiting
+- **ДЗ №6**: Проектирование Event-Driven архитектуры
 
 ## Сущности
 
@@ -257,3 +258,63 @@ python3 -m pytest tests/test_api.py -v
 ## Автор
 
 Ситдиков Ришат М8О-102СВ-25
+
+---
+
+## Event-Driven архитектура (ДЗ №6)
+
+### События системы
+
+| Событие | Описание | Routing Key |
+|---------|----------|-------------|
+| `UserCreated` | Новый пользователь зарегистрировался | `user.created` |
+| `FolderCreated` | Пользователь создал почтовую папку | `folder.created` |
+| `MessageCreated` | Новое письмо создано в папке | `message.created` |
+
+### Топология RabbitMQ
+
+**Exchange:** `email_events` (topic)
+
+**Queues:**
+- `notifications_queue` — уведомления (user.created, message.created)
+- `analytics_queue` — аналитика (все события)
+- `audit_queue` — аудит (все события)
+
+### Запуск с RabbitMQ
+
+```bash
+# Запуск всех сервисов (PostgreSQL, Redis, RabbitMQ, API)
+docker-compose up --build
+
+# Management UI RabbitMQ
+# http://localhost:15672 (guest/guest)
+```
+
+### Потребители событий
+
+Пример запуска consumer для аналитики:
+
+```bash
+cd src
+python3 -c "from events.consumer import create_analytics_consumer; create_analytics_consumer().start_consuming()"
+```
+
+### CQRS
+
+**Write Model (команды):**
+- POST /api/auth/register → CreateUser
+- POST /api/folders → CreateFolder
+- POST /api/messages → CreateMessage
+
+**Read Model (запросы):**
+- GET /api/users/* → чтение из БД/кеша
+- GET /api/folders/* → чтение из БД/кеша
+- GET /api/messages/* → чтение из БД/кеша
+
+События публикуются после успешной записи и используются для:
+- Уведомлений (отправка email)
+- Аналитики (сбор метрик)
+- Аудита (логирование действий)
+- Поиска (индексация)
+
+См. подробнее в [event_driven_design.md](event_driven_design.md) и [event_catalog.md](event_catalog.md).

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 
 from models.user_create import UserCreate
 from models.user_response import UserResponse
@@ -21,7 +21,7 @@ def get_db() -> Database:
 
 @router.post("/api/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(RATE_LIMITS['user_create'])
-async def create_user(request, user_data: UserCreate, db: Database = Depends(get_db)):
+async def create_user(user_data: UserCreate, request: Request, db: Database = Depends(get_db)):
     """
     Create a new user (admin endpoint).
     Note: Use /api/auth/register for self-registration.
@@ -52,7 +52,7 @@ async def create_user(request, user_data: UserCreate, db: Database = Depends(get
 
 @router.get("/api/users/login/{login}", response_model=UserResponse)
 @limiter.limit(RATE_LIMITS['read'])
-async def get_user_by_login(request, login: str, db: Database = Depends(get_db)):
+async def get_user_by_login(login: str, request: Request, db: Database = Depends(get_db)):
     # Try to get from cache
     cache_key = f"user:login:{login}"
     cached_user = cache.get(cache_key)
@@ -79,7 +79,7 @@ async def get_user_by_login(request, login: str, db: Database = Depends(get_db))
 
 @router.get("/api/users/search", response_model=list[UserResponse])
 @limiter.limit(RATE_LIMITS['user_search'])
-async def search_users(request, firstName: str = None, lastName: str = None, db: Database = Depends(get_db)):
+async def search_users(firstName: str = None, lastName: str = None, request: Request = None, db: Database = Depends(get_db)):
     if not firstName and not lastName:
         raise HTTPException(status_code=400, detail="At least one of firstName or lastName must be provided")
     

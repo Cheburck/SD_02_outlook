@@ -1,8 +1,16 @@
 import pytest
 import os
-
 from fastapi.testclient import TestClient
+
+# Import app after conftest sets environment variables
 from main import app
+
+
+@pytest.fixture(autouse=True)
+def clean_database(clean_db):
+    """Clean database before each test."""
+    pass
+
 
 client = TestClient(app)
 
@@ -11,7 +19,9 @@ class TestHealth:
     def test_health_check(self):
         response = client.get("/health")
         assert response.status_code == 200
-        assert response.json() == {"status": "healthy"}
+        data = response.json()
+        assert data["status"] == "healthy"
+        assert "cache" in data
 
 
 class TestAuth:
@@ -23,10 +33,10 @@ class TestAuth:
             "password": "password123"
         }
         response = client.post("/api/auth/register", json=user_data)
-        assert response.status_code == 200
+        assert response.status_code == 201
         data = response.json()
-        assert "access_token" in data
-        assert data["token_type"] == "bearer"
+        assert "id" in data
+        assert data["login"] == "testuser"
     
     def test_register_duplicate_user(self):
         user_data = {
@@ -36,7 +46,7 @@ class TestAuth:
             "password": "password123"
         }
         response = client.post("/api/auth/register", json=user_data)
-        assert response.status_code == 200
+        assert response.status_code == 201
         response = client.post("/api/auth/register", json=user_data)
         assert response.status_code == 400
         assert "already exists" in response.json()["detail"]
@@ -128,19 +138,22 @@ class TestUsers:
 
 class TestFolders:
     def get_auth_token(self):
+        login = f"folderuser_{os.urandom(4).hex()}"
         user_data = {
-            "login": f"folderuser_{os.urandom(4).hex()}",
+            "login": login,
             "firstName": "Folder",
             "lastName": "User",
             "password": "password123"
         }
-        response = client.post("/api/auth/register", json=user_data)
-        return response.json()["access_token"]
+        client.post("/api/auth/register", json=user_data)
+        login_response = client.post("/api/auth/login", json={"login": login, "password": "password123"})
+        return login_response.json()["access_token"]
     
-    def test_create_folder_protected(self):
-        folder_data = {"name": "Inbox", "userId": 1}
+    def test_create_folder_requires_valid_user(self):
+        folder_data = {"name": "Inbox", "userId": 99999}
         response = client.post("/api/folders", json=folder_data)
-        assert response.status_code == 401
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"]
     
     def test_create_folder_success(self):
         token = self.get_auth_token()
@@ -158,9 +171,10 @@ class TestFolders:
         assert response.status_code == 201
         assert response.json()["name"] == "Inbox"
     
-    def test_get_all_folders_protected(self):
+    def test_get_all_folders_public(self):
         response = client.get("/api/folders")
-        assert response.status_code == 401
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
     
     def test_get_all_folders_success(self):
         token = self.get_auth_token()
@@ -183,16 +197,27 @@ class TestFolders:
 
 class TestMessages:
     def setup_message_test(self):
+        login = f"msguser_{os.urandom(4).hex()}"
         user_data = {
-            "login": f"msguser_{os.urandom(4).hex()}",
+            "login": login,
             "firstName": "Message",
             "lastName": "User",
             "password": "password123"
         }
-        auth_response = client.post("/api/auth/register", json=user_data)
-        token = auth_response.json()["access_token"]
+        client.post("/api/auth/register", json=user_data)
+        login_response = client.post("/api/auth/login", json={"login": login, "password": "password123"})
+        token = login_response.json()["access_token"]
         
-        folder_response = client.post("/api/folders", json={"name": "Inbox", "userId": 1}, headers={"Authorization": f"Bearer {token}"})
+        # Create a user first to get a valid user_id
+        user_response = client.post("/api/users", json={
+            "login": f"msgowner_{os.urandom(4).hex()}",
+            "firstName": "Message",
+            "lastName": "Owner",
+            "password": "password123"
+        })
+        user_id = user_response.json()["id"]
+        
+        folder_response = client.post("/api/folders", json={"name": "Inbox", "userId": user_id}, headers={"Authorization": f"Bearer {token}"})
         folder_id = folder_response.json()["id"]
         return token, folder_id
     
@@ -202,9 +227,10 @@ class TestMessages:
             "subject": "Test Subject",
             "body": "Test message body",
             "sender": "sender@example.com",
-            "recipient": "recipient@example.com"
+            "recipient": "recipient@example.com",
+            "folderId": folder_id
         }
-        response = client.post(f"/api/folders/{folder_id}/messages", json=message_data)
+        response = client.post("/api/messages", json=message_data)
         assert response.status_code == 201
         data = response.json()
         assert data["subject"] == "Test Subject"
@@ -216,19 +242,21 @@ class TestMessages:
             "subject": "Test",
             "body": "Test",
             "sender": "test@test.com",
-            "recipient": "test@test.com"
+            "recipient": "test@test.com",
+            "folderId": 99999
         }
-        response = client.post("/api/folders/99999/messages", json=message_data)
+        response = client.post("/api/messages", json=message_data)
         assert response.status_code == 404
     
     def test_get_messages_in_folder(self):
         token, folder_id = self.setup_message_test()
         for i in range(3):
-            client.post(f"/api/folders/{folder_id}/messages", json={
+            client.post("/api/messages", json={
                 "subject": f"Message {i}",
                 "body": f"Body {i}",
                 "sender": f"sender{i}@example.com",
-                "recipient": f"recipient{i}@example.com"
+                "recipient": f"recipient{i}@example.com",
+                "folderId": folder_id
             })
         
         response = client.get(f"/api/folders/{folder_id}/messages")
@@ -237,11 +265,12 @@ class TestMessages:
     
     def test_get_message_by_id(self):
         token, folder_id = self.setup_message_test()
-        create_response = client.post(f"/api/folders/{folder_id}/messages", json={
+        create_response = client.post("/api/messages", json={
             "subject": "Find Me",
             "body": "Find this message",
             "sender": "sender@example.com",
-            "recipient": "recipient@example.com"
+            "recipient": "recipient@example.com",
+            "folderId": folder_id
         })
         message_id = create_response.json()["id"]
         

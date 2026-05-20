@@ -1,10 +1,14 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
+from datetime import datetime
 
 from models.message_create import MessageCreate
 from models.message_response import MessageResponse
 from db.postgres import get_db_connection, Database
 from cache import cache
 from rate_limiter import limiter, RATE_LIMITS
+from events.events import MessageCreated
+from events.publisher import get_publisher
+from events.config import RabbitMQConfig
 
 router = APIRouter()
 
@@ -20,7 +24,7 @@ def get_db() -> Database:
 
 @router.post("/api/messages", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(RATE_LIMITS['message_create'])
-async def create_message(request, message_data: MessageCreate, db: Database = Depends(get_db)):
+async def create_message(message_data: MessageCreate, request: Request, db: Database = Depends(get_db)):
     # Check if folder exists
     if not db.get_folder_by_id(message_data.folderId):
         raise HTTPException(status_code=404, detail=f"Folder with id {message_data.folderId} not found")
@@ -36,6 +40,19 @@ async def create_message(request, message_data: MessageCreate, db: Database = De
     # Invalidate folder messages cache
     cache.invalidate_folder(message_data.folderId)
     
+    # Publish MessageCreated event
+    publisher = get_publisher()
+    if publisher:
+        event = MessageCreated(
+            message_id=message["id"],
+            subject=message["subject"],
+            sender=message["sender"],
+            recipient=message["recipient"],
+            folder_id=message["folder_id"],
+            created_at=message["created_at"],
+        )
+        publisher.publish(event, RabbitMQConfig.ROUTING_MESSAGE_CREATED)
+    
     return MessageResponse(
         id=message["id"],
         folderId=message["folder_id"],
@@ -49,7 +66,7 @@ async def create_message(request, message_data: MessageCreate, db: Database = De
 
 @router.get("/api/folders/{folder_id}/messages", response_model=list[MessageResponse])
 @limiter.limit(RATE_LIMITS['read'])
-async def get_messages_in_folder(request, folder_id: int, db: Database = Depends(get_db)):
+async def get_messages_in_folder(folder_id: int, request: Request, db: Database = Depends(get_db)):
     # Try to get from cache
     cache_key = f"folder:{folder_id}:messages"
     cached_messages = cache.get(cache_key)
@@ -79,7 +96,7 @@ async def get_messages_in_folder(request, folder_id: int, db: Database = Depends
 
 @router.get("/api/messages/{message_id}", response_model=MessageResponse)
 @limiter.limit(RATE_LIMITS['read'])
-async def get_message(request, message_id: int, db: Database = Depends(get_db)):
+async def get_message(message_id: int, request: Request, db: Database = Depends(get_db)):
     # Try to get from cache
     cache_key = f"message:{message_id}"
     cached_message = cache.get(cache_key)

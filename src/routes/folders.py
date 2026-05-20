@@ -1,10 +1,14 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
+from datetime import datetime
 
 from models.folder_create import FolderCreate
 from models.folder_response import FolderResponse
 from db.postgres import get_db_connection, Database
 from cache import cache
 from rate_limiter import limiter, RATE_LIMITS
+from events.events import FolderCreated
+from events.publisher import get_publisher
+from events.config import RabbitMQConfig
 
 router = APIRouter()
 
@@ -20,7 +24,7 @@ def get_db() -> Database:
 
 @router.post("/api/folders", response_model=FolderResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(RATE_LIMITS['folder_create'])
-async def create_folder(request, folder_data: FolderCreate, db: Database = Depends(get_db)):
+async def create_folder(folder_data: FolderCreate, request: Request, db: Database = Depends(get_db)):
     # Check if user exists
     if not db.get_user_by_id(folder_data.userId):
         raise HTTPException(status_code=404, detail=f"User with id {folder_data.userId} not found")
@@ -33,6 +37,17 @@ async def create_folder(request, folder_data: FolderCreate, db: Database = Depen
     # Invalidate user folders cache
     cache.invalidate_user(folder_data.userId)
     
+    # Publish FolderCreated event
+    publisher = get_publisher()
+    if publisher:
+        event = FolderCreated(
+            folder_id=folder["id"],
+            name=folder["name"],
+            user_id=folder["user_id"],
+            created_at=folder["created_at"],
+        )
+        publisher.publish(event, RabbitMQConfig.ROUTING_FOLDER_CREATED)
+    
     return FolderResponse(
         id=folder["id"],
         name=folder["name"],
@@ -43,7 +58,7 @@ async def create_folder(request, folder_data: FolderCreate, db: Database = Depen
 
 @router.get("/api/folders", response_model=list[FolderResponse])
 @limiter.limit(RATE_LIMITS['read'])
-async def get_all_folders(request, db: Database = Depends(get_db)):
+async def get_all_folders(request: Request, db: Database = Depends(get_db)):
     # Try to get from cache (all folders)
     cache_key = "folders:all"
     cached_folders = cache.get(cache_key)
@@ -70,7 +85,7 @@ async def get_all_folders(request, db: Database = Depends(get_db)):
 
 @router.get("/api/users/{user_id}/folders", response_model=list[FolderResponse])
 @limiter.limit(RATE_LIMITS['read'])
-async def get_user_folders(request, user_id: int, db: Database = Depends(get_db)):
+async def get_user_folders(user_id: int, request: Request, db: Database = Depends(get_db)):
     # Try to get from cache
     cache_key = f"user:{user_id}:folders"
     cached_folders = cache.get(cache_key)

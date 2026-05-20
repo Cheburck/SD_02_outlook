@@ -36,6 +36,24 @@ services:
     restart: unless-stopped
     command: redis-server --appendonly yes
 
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: outlook_rabbitmq
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   api:
     build: .
     container_name: outlook_api
@@ -57,12 +75,18 @@ services:
       - RATE_LIMIT_AUTH=10/minute
       - RATE_LIMIT_REGISTER=5/minute
       - RATE_LIMIT_SEARCH=30/minute
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USERNAME=guest
+      - RABBITMQ_PASSWORD=guest
     volumes:
       - ./src:/app/src
     depends_on:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -75,3 +99,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  rabbitmq_data:
